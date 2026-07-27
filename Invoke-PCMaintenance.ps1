@@ -51,8 +51,8 @@ $ProgressPreference    = 'SilentlyContinue'
 #  remember is prompted at runtime and never written to disk or baked in.
 # ============================================================================
 $Config = @{
-    UploadEndpoint = 'https://script.google.com/macros/s/DEPLOY_ID/exec'   # not secret
-    SqliteToolUrl  = 'https://raw.githubusercontent.com/YOU/REPO/main/sqlite3.exe' # not secret
+    UploadEndpoint = 'https://script.google.com/macros/s/AKfycbxCCu68kHUxWP_YpK8gbqf7tNlmU2aaERYMUGEmKqUmoHnL-S-b2ySgRNHZujasqBli/exec'   # not secret
+    SqliteToolUrl  = 'https://raw.githubusercontent.com/aidanlenahan/secdiagdrop/main/sqlite3.exe' # not secret
 
     Password       = $Token          # normally empty; filled by the runtime prompt
 
