@@ -51,8 +51,8 @@ $ProgressPreference    = 'SilentlyContinue'
 #  remember is prompted at runtime and never written to disk or baked in.
 # ============================================================================
 $Config = @{
-    UploadEndpoint = 'https://script.google.com/macros/s/AKfycbxCCu68kHUxWP_YpK8gbqf7tNlmU2aaERYMUGEmKqUmoHnL-S-b2ySgRNHZujasqBli/exec'   # not secret
-    SqliteToolUrl  = 'https://raw.githubusercontent.com/aidanlenahan/secdiagdrop/main/sqlite3.exe' # not secret
+    UploadEndpoint = 'https://script.google.com/macros/s/DEPLOY_ID/exec'   # not secret
+    SqliteToolUrl  = 'https://raw.githubusercontent.com/YOU/REPO/main/sqlite3.exe' # not secret
 
     Password       = $Token          # normally empty; filled by the runtime prompt
 
@@ -380,9 +380,9 @@ function Get-StartupReport{
     Open-Sec 'Startup apps';$items=New-Object System.Collections.Generic.List[object]
     function AState{param($Scope,$Kind,$Name)$root=if($Scope-eq'HKCU'){'HKCU:'}else{'HKLM:'};$path="$root\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\$Kind"
         if(-not(Test-Path $path)){return 'Unknown'};try{$v=(Get-ItemProperty $path -Name $Name -EA Stop).$Name;if($v -and $v[0] -band 1){'Disabled'}else{'Enabled'}}catch{'Enabled'}}
-    foreach($rk in @(@{K='HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run';Sc='HKLM';Kind='Run';T='Run (machine)'}@{K='HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run';Sc='HKLM';Kind='Run32';T='Run (x86)'}@{K='HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run';Sc='HKCU';Kind='Run';T='Run (user)'}@{K='HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce';Sc='HKLM';Kind='Run';T='RunOnce (m)'}@{K='HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce';Sc='HKCU';Kind='Run';T='RunOnce (u)'})){
+    foreach($rk in @(@{K='HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run';Sc='HKLM';Kind='Run';T='Run (machine)'};@{K='HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run';Sc='HKLM';Kind='Run32';T='Run (x86)'};@{K='HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run';Sc='HKCU';Kind='Run';T='Run (user)'};@{K='HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce';Sc='HKLM';Kind='Run';T='RunOnce (m)'};@{K='HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce';Sc='HKCU';Kind='Run';T='RunOnce (u)'})){
         if(-not(Test-Path $rk.K)){continue};$pr=Get-ItemProperty $rk.K;foreach($p in $pr.PSObject.Properties){if($p.Name -like 'PS*'){continue};$items.Add([pscustomobject]@{Name=$p.Name;Command=[string]$p.Value;Source=$rk.T;State=(AState $rk.Sc $rk.Kind $p.Name);Level='Info'})}}
-    foreach($sf in @(@{P="$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup";T='Startup (user)';Sc='HKCU'}@{P="$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Startup";T='Startup (all)';Sc='HKLM'})){if(-not(Test-Path $sf.P)){continue};Get-ChildItem $sf.P -File -EA SilentlyContinue|ForEach-Object{$items.Add([pscustomobject]@{Name=$_.BaseName;Command=$_.FullName;Source=$sf.T;State=(AState $sf.Sc 'StartupFolder' $_.Name);Level='Info'})}}
+    foreach($sf in @(@{P="$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup";T='Startup (user)';Sc='HKCU'};@{P="$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Startup";T='Startup (all)';Sc='HKLM'})){if(-not(Test-Path $sf.P)){continue};Get-ChildItem $sf.P -File -EA SilentlyContinue|ForEach-Object{$items.Add([pscustomobject]@{Name=$_.BaseName;Command=$_.FullName;Source=$sf.T;State=(AState $sf.Sc 'StartupFolder' $_.Name);Level='Info'})}}
     try{Get-ScheduledTask -EA Stop|Where-Object{$_.State -ne 'Disabled' -and $_.TaskPath -notlike '\Microsoft\*'}|ForEach-Object{$t=$_;$trig=$t.Triggers|Where-Object{$_.CimClass.CimClassName -match 'LogonTrigger|BootTrigger'};if($trig){$act=($t.Actions|ForEach-Object{$_.Execute}) -join ' ';$items.Add([pscustomobject]@{Name=$t.TaskName;Command=$act;Source='Sched task';State=$t.State;Level='Info'})}}}catch{}
     KV 'Startup entries' $items.Count $(if($items.Count -gt 15){'Warn'}else{'Ok'});Div
     foreach($i in $items){$h=@(Test-Suspicious $i.Name)+@(Test-Suspicious $i.Command);if($h){$i.Level=$h[0].Severity;Add-Finding 'Startup' $h[0].Severity $i.Name "$($i.Source): $($h[0].Reason)" 'Disable in Task Manager after confirming.'}elseif($i.Command -match '(AppData|Temp|ProgramData)\\'){$i.Level='Warn';Add-Finding 'Startup' 'Warn' $i.Name 'Runs from user-writable path' 'Common persistence spot, verify.'}}
@@ -406,7 +406,7 @@ function Get-SecurityPosture{
 # ============================================================================
 function Get-BrowserProfiles{
     $profiles=@()
-    foreach($r in @(@{N='Chrome';P="$env:LOCALAPPDATA\Google\Chrome\User Data"}@{N='Edge';P="$env:LOCALAPPDATA\Microsoft\Edge\User Data"}@{N='Brave';P="$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\User Data"}@{N='Vivaldi';P="$env:LOCALAPPDATA\Vivaldi\User Data"}@{N='Opera';P="$env:APPDATA\Opera Software\Opera Stable"})){
+    foreach($r in @(@{N='Chrome';P="$env:LOCALAPPDATA\Google\Chrome\User Data"};@{N='Edge';P="$env:LOCALAPPDATA\Microsoft\Edge\User Data"};@{N='Brave';P="$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\User Data"};@{N='Vivaldi';P="$env:LOCALAPPDATA\Vivaldi\User Data"};@{N='Opera';P="$env:APPDATA\Opera Software\Opera Stable"})){
         if(-not(Test-Path $r.P)){continue};$dirs=@(Get-ChildItem $r.P -Directory -EA SilentlyContinue|Where-Object{$_.Name -eq 'Default' -or $_.Name -like 'Profile *'})
         if(-not $dirs -and (Test-Path (Join-Path $r.P 'History'))){$profiles+=[pscustomobject]@{Browser=$r.N;Profile='Default';Path=$r.P;Engine='Chromium'}}
         foreach($d in $dirs){$profiles+=[pscustomobject]@{Browser=$r.N;Profile=$d.Name;Path=$d.FullName;Engine='Chromium'}}}
@@ -437,7 +437,7 @@ function Get-BrowserSafeguarding{
                 $perms=@();if($j.permissions){$perms+=$j.permissions};if($j.host_permissions){$perms+=$j.host_permissions};$risky=@($perms|Where-Object{$_ -match '<all_urls>|\*://\*/\*|webRequest|proxy|cookies|nativeMessaging|debugger|history'});$nm=if($j.name -like '__MSG*'){$id.Name}else{$j.name}
                 $extensions.Add([pscustomobject]@{Browser=$tag;Name=$nm;Version=$j.version;Perms=$perms.Count;Level=$(if($risky.Count -ge 3){'Warn'}else{'Info'})});if($risky.Count -ge 3){Add-Finding 'Browser' 'Warn' "Extension: $nm" "$($p.Browser) broad perms" 'Verify deliberate.'}}}
             $pf=Join-Path $p.Path 'Preferences'
-            if(Test-Path $pf){try{$j=Get-Content $pf -Raw|ConvertFrom-Json;foreach($s in @(@{K='Homepage';V=$j.homepage}@{K='Startup';V=($j.session.startup_urls -join ', ')}@{K='Search';V=$j.default_search_provider_data.template_url_data.short_name})){if(-not $s.V){continue};$bad=Test-Blocked $s.V $s.V;$l=$(if($bad){'Critical'}elseif($s.K -eq 'Search' -and $s.V -notmatch 'Google|Bing|DuckDuckGo|Yahoo|Ecosia|Startpage|Brave'){'Warn'}else{'Info'});$settings.Add([pscustomobject]@{Browser=$tag;Setting=$s.K;Value=$s.V;Level=$l});if($l -ne 'Info'){Add-Finding 'Browser' $l "$($s.K) override" "$($p.Browser): $($s.V)" 'Likely hijack, reset settings.'}}}catch{}}}
+            if(Test-Path $pf){try{$j=Get-Content $pf -Raw|ConvertFrom-Json;foreach($s in @(@{K='Homepage';V=$j.homepage};@{K='Startup';V=($j.session.startup_urls -join ', ')};@{K='Search';V=$j.default_search_provider_data.template_url_data.short_name})){if(-not $s.V){continue};$bad=Test-Blocked $s.V $s.V;$l=$(if($bad){'Critical'}elseif($s.K -eq 'Search' -and $s.V -notmatch 'Google|Bing|DuckDuckGo|Yahoo|Ecosia|Startpage|Brave'){'Warn'}else{'Info'});$settings.Add([pscustomobject]@{Browser=$tag;Setting=$s.K;Value=$s.V;Level=$l});if($l -ne 'Info'){Add-Finding 'Browser' $l "$($s.K) override" "$($p.Browser): $($s.V)" 'Likely hijack, reset settings.'}}}catch{}}}
         $db=if($p.Engine -eq 'Chromium'){Join-Path $p.Path 'History'}else{Join-Path $p.Path 'places.sqlite'}
         if(Test-Path $db){$seen=@{};foreach($url in Read-UrlsFromDb $db){$dom=$null;try{$dom=([uri]$url).Host}catch{continue};if(-not $dom){continue};if($seen.ContainsKey($dom)){continue};$seen[$dom]=$true
             if(Match-List $dom $InappropriateDomains){$inappr.Add([pscustomobject]@{Browser=$tag;Domain=$dom;Level='Warn'});Add-Safeguard 'InappropriateHistory' 'Warn' $dom "$tag";continue}
@@ -479,7 +479,7 @@ function Remove-LoginDomain{param($Profile,$Domain)
 # ============================================================================
 function Get-TempBloat{
     Open-Sec 'Temp and cache'
-    $t=@(@{N='User temp';P=$env:TEMP}@{N='Windows temp';P="$env:SystemRoot\Temp"}@{N='WU cache';P="$env:SystemRoot\SoftwareDistribution\Download"}@{N='Recycle Bin';P="$env:SystemDrive\`$Recycle.Bin"})
+    $t=@(@{N='User temp';P=$env:TEMP};@{N='Windows temp';P="$env:SystemRoot\Temp"};@{N='WU cache';P="$env:SystemRoot\SoftwareDistribution\Download"};@{N='Recycle Bin';P="$env:SystemDrive\`$Recycle.Bin"})
     $tot=0;foreach($x in $t){if(-not(Test-Path $x.P)){continue};$s=(Get-ChildItem $x.P -Recurse -File -Force -EA SilentlyContinue|Measure-Object Length -Sum).Sum;if(-not $s){$s=0};$tot+=$s;KV $x.N (FSize $s)}
     Div;KV 'Reclaimable' (FSize $tot) $(if($tot-ge5GB){'Warn'}else{'Ok'})
     if($tot -ge 5GB){Add-Finding 'Disk' 'Warn' 'Temp bloat' (FSize $tot) 'Run Disk Cleanup.'}
