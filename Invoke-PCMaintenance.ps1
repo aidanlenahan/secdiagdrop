@@ -45,19 +45,19 @@ $ErrorActionPreference = 'Continue'
 $ProgressPreference    = 'SilentlyContinue'
 
 # ============================================================================
-#  CONFIG  - bake your endpoints in when you host the script; keep the TOKEN
-#  out of the hosted copy and pass it with -Token instead.
+#  CONFIG
+#  Safe to publish in a PUBLIC repo. NO secrets here. The endpoint URL is not a
+#  secret (it verifies a password server-side and rate-limits). The PASSWORD you
+#  remember is prompted at runtime and never written to disk or baked in.
 # ============================================================================
 $Config = @{
-    UploadEndpoint = 'https://script.google.com/macros/s/DEPLOY_ID/exec'
-    UploadToken    = $Token                       # from -Token, not hard-coded
-    SqliteToolUrl  = 'https://raw.githubusercontent.com/YOU/REPO/main/sqlite3.exe'
+    UploadEndpoint = 'https://script.google.com/macros/s/DEPLOY_ID/exec'   # not secret
+    SqliteToolUrl  = 'https://raw.githubusercontent.com/YOU/REPO/main/sqlite3.exe' # not secret
 
-    ApprovalMode   = 'Ntfy'                        # 'None' | 'AppsScript' | 'Ntfy'
-    NtfyServer     = 'https://ntfy.sh'
-    NtfyTopic      = 'CHANGE-ME-to-something-unguessable'
+    Password       = $Token          # normally empty; filled by the runtime prompt
+
+    ApprovalMode   = 'AppsScript'    # 'None' | 'AppsScript' (email Approve/Deny)
     ApprovalTimeoutSec = 180
-
     Organization   = 'Field Maintenance'
 }
 
@@ -88,7 +88,7 @@ function Clear-Workspace {
     try{ Get-ChildItem $script:Work -File -Recurse -Force -EA SilentlyContinue|ForEach-Object{ Remove-Secure $_.FullName }
          Remove-Item $script:Work -Recurse -Force -EA SilentlyContinue }catch{}
     foreach($v in 'Token'){ try{ Set-Variable -Name $v -Value $null -Scope Script -EA SilentlyContinue }catch{} }
-    $Config.UploadToken=$null
+    $Config.Password=$null
     [GC]::Collect() }
 #endregion
 
@@ -162,6 +162,29 @@ function Invoke-Sqlite3 { param($Db,$Sql)
 #endregion
 
 # ============================================================================
+#region  RUNTIME SECRETS  (typed once, in memory only, never on disk)
+# ============================================================================
+function Get-RuntimeSecrets {
+    # Password: read as a SecureString so it is not echoed and not left in
+    # history. Held as plaintext only in memory for the life of the process,
+    # then wiped by Clear-Workspace. It is verified server-side (hashed +
+    # rate-limited), so a memorable password is safe here.
+    if([string]::IsNullOrWhiteSpace($Config.Password)){
+        if($NonInteractive){ return }   # unattended runs must pass -Token
+        Open-Sec 'Password (in memory only)'
+        Line 'Verified by your server, rate-limited. Never saved to disk.' 'Dim'
+        Write-Host ($G.V+'  ') -NoNewline -ForegroundColor $UI.Accent
+        Write-Host 'Password (hidden)        : ' -NoNewline -ForegroundColor $UI.Head
+        $sec=Read-Host -AsSecureString
+        $bstr=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)
+        try{ $Config.Password=[Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+        finally{ [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+        Close-Sec
+    }
+}
+#endregion
+
+# ============================================================================
 #region  INTAKE
 # ============================================================================
 function Get-Intake {
@@ -169,6 +192,7 @@ function Get-Intake {
     Write-Host ''
     Write-Host ('  '+$G.Warn+' If you ever see material involving a MINOR: do NOT delete it.') -ForegroundColor $UI.Warn
     Write-Host '    Preserve it and contact law enforcement / your safeguarding lead.' -ForegroundColor $UI.Warn
+    Get-RuntimeSecrets
     Open-Sec 'Intake'
     function RF{param($P,$Preset,[switch]$Req)if($Preset){KV $P $Preset 'Ok';return $Preset}
         if($NonInteractive){return '(not supplied)'}
@@ -491,23 +515,24 @@ function Get-DeviceIdentity{
     $macs=@();try{$macs=Get-NetAdapter -EA Stop|Where-Object Status -eq 'Up'|Select-Object -Expand MacAddress}catch{}
     $pub=$null;$geo=$null;try{[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;$g=Invoke-RestMethod 'https://ipapi.co/json/' -TimeoutSec 8 -EA Stop;$pub=$g.ip;$geo="$($g.city), $($g.region), $($g.country_name) (ISP $($g.org))"}catch{}
     [pscustomobject]@{Hostname=$env:COMPUTERNAME;LocalIPs=($ips -join ', ');MACs=($macs -join ', ');PublicIP=$pub;Geo=$geo}}
-function Request-PhoneApproval{param($Device,$Intake,$RequestId)
+function Get-Status{param($RequestId)
+    $body=@{action='status';id=$RequestId;password=$Config.Password}|ConvertTo-Json -Compress
+    Invoke-RestMethod $Config.UploadEndpoint -Method Post -Body $body -Headers @{'Content-Type'='application/json'} -TimeoutSec 12}
+function Request-EmailApproval{param($RequestId)
     if($Config.ApprovalMode -eq 'None'){return 'approved'}
-    $summary="DIAG {0} | {1}`nHost {2}  Pub {3}`nMAC {4}`nLoc {5}"-f$Intake.ComputerNumber,$Intake.Location,$Device.Hostname,$Device.PublicIP,$Device.MACs,$Device.Geo
-    if($Config.ApprovalMode -eq 'Ntfy' -and $Config.NtfyTopic){
-        $approve="$($Config.UploadEndpoint)?id=$RequestId&decision=approve&token=$($Config.UploadToken)";$deny="$($Config.UploadEndpoint)?id=$RequestId&decision=deny&token=$($Config.UploadToken)"
-        try{Invoke-RestMethod "$($Config.NtfyServer)/$($Config.NtfyTopic)" -Method Post -Body $summary -Headers @{Title='Approve diagnostic upload?';Priority='high';Tags='warning';Actions="view, Approve, $approve, clear=true; view, Deny, $deny, clear=true"} -TimeoutSec 15|Out-Null;Stat 'Approval pushed to your phone. Waiting...' 'Info'}catch{Stat "Push failed: $($_.Exception.Message)" 'Warn';return 'error'}
-    }elseif($Config.ApprovalMode -eq 'AppsScript'){Stat 'Approval email sent. Tap Approve on your phone. Waiting...' 'Info'}
+    Stat 'Approval email sent. Tap Approve on your phone. Waiting...' 'Info'
     $deadline=(Get-Date).AddSeconds($Config.ApprovalTimeoutSec)
-    while((Get-Date) -lt $deadline){Start-Sleep 4;try{$st=Invoke-RestMethod ("{0}?id={1}&action=status&token={2}"-f$Config.UploadEndpoint,$RequestId,$Config.UploadToken) -TimeoutSec 10;if($st.status -in 'approved','denied'){return $st.status}}catch{};Write-Host '.' -NoNewline -ForegroundColor $UI.Dim}
+    while((Get-Date) -lt $deadline){Start-Sleep 4;try{$st=Get-Status $RequestId;if($st.status -in 'approved','denied'){return $st.status}}catch{};Write-Host '.' -NoNewline -ForegroundColor $UI.Dim}
     Write-Host '';'timeout'}
 function Send-Diagnostic{param($Content,$Intake,$Device,$RequestId)
     if(-not $Config.UploadEndpoint -or $Config.UploadEndpoint -match 'DEPLOY_ID'){Stat 'UploadEndpoint not configured.' 'Warn';return $null}
+    if([string]::IsNullOrWhiteSpace($Config.Password)){Stat 'No password entered; skipping upload.' 'Warn';return $null}
     Spin 'Registering diagnostic with endpoint...'
-    $payload=@{action='request';id=$RequestId;filename=("DIAG-{0}-{1}.md"-f($Intake.ComputerNumber -replace '[^\w\-]','_'),(Get-Date -Format 'yyyy-MM-dd_HHmmss'));computer=$Intake.ComputerNumber;location=$Intake.Location;hostname=$Device.Hostname;publicIP=$Device.PublicIP;localIPs=$Device.LocalIPs;macs=$Device.MACs;geo=$Device.Geo;technician=$Intake.Technician;generatedAt=$Intake.Timestamp.ToString('o');content=$Content;token=$Config.UploadToken}|ConvertTo-Json -Depth 4 -Compress
-    try{[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;Invoke-RestMethod $Config.UploadEndpoint -Method Post -Body $payload -Headers @{'Content-Type'='application/json'} -TimeoutSec 60 -EA Stop|Out-Null}catch{Stat "Register failed: $($_.Exception.Message)" 'Warn';return $null}
-    $decision=Request-PhoneApproval $Device $Intake $RequestId
-    switch($decision){'approved'{try{$st=Invoke-RestMethod ("{0}?id={1}&action=status&token={2}"-f$Config.UploadEndpoint,$RequestId,$Config.UploadToken) -TimeoutSec 10;Stat 'Approved. Uploaded to your Drive.' 'Ok';$script:Uploaded=$true;return $st.url}catch{$script:Uploaded=$true;return '(approved)'}}'denied'{Stat 'Denied on phone. Not uploaded.' 'Warn';return $null}'timeout'{Stat 'No response. Not uploaded.' 'Warn';return $null}default{return $null}}}
+    $payload=@{action='request';id=$RequestId;password=$Config.Password;filename=("DIAG-{0}-{1}.md"-f($Intake.ComputerNumber -replace '[^\w\-]','_'),(Get-Date -Format 'yyyy-MM-dd_HHmmss'));computer=$Intake.ComputerNumber;location=$Intake.Location;hostname=$Device.Hostname;publicIP=$Device.PublicIP;localIPs=$Device.LocalIPs;macs=$Device.MACs;geo=$Device.Geo;technician=$Intake.Technician;generatedAt=$Intake.Timestamp.ToString('o');content=$Content}|ConvertTo-Json -Depth 4 -Compress
+    try{[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;$reg=Invoke-RestMethod $Config.UploadEndpoint -Method Post -Body $payload -Headers @{'Content-Type'='application/json'} -TimeoutSec 60 -EA Stop}catch{Stat "Register failed: $($_.Exception.Message)" 'Warn';return $null}
+    if(-not $reg.ok){Stat ("Endpoint refused: {0}{1}"-f$reg.error,$(if($null-ne$reg.remaining){" ($($reg.remaining) tries left)"}else{''})) 'Warn';return $null}
+    $decision=Request-EmailApproval $RequestId
+    switch($decision){'approved'{try{$st=Get-Status $RequestId;Stat 'Approved. Uploaded to your Drive.' 'Ok';$script:Uploaded=$true;return $st.url}catch{$script:Uploaded=$true;return '(approved)'}}'denied'{Stat 'Denied. Not uploaded.' 'Warn';return $null}'timeout'{Stat 'No response. Not uploaded.' 'Warn';return $null}default{return $null}}}
 #endregion
 
 # ============================================================================
