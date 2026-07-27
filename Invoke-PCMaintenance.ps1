@@ -51,8 +51,8 @@ $ProgressPreference    = 'SilentlyContinue'
 #  remember is prompted at runtime and never written to disk or baked in.
 # ============================================================================
 $Config = @{
-    UploadEndpoint = 'https://script.google.com/macros/s/AKfycbxCCu68kHUxWP_YpK8gbqf7tNlmU2aaERYMUGEmKqUmoHnL-S-b2ySgRNHZujasqBli/exec'   # not secret
-    SqliteToolUrl  = 'https://raw.githubusercontent.com/aidanlenahan/secdiagdrop/main/sqlite3.exe' # not secret
+    UploadEndpoint = 'https://script.google.com/macros/s/DEPLOY_ID/exec'   # not secret
+    SqliteToolUrl  = 'https://raw.githubusercontent.com/YOU/REPO/main/sqlite3.exe' # not secret
 
     Password       = $Token          # normally empty; filled by the runtime prompt
 
@@ -96,7 +96,7 @@ function Clear-Workspace {
 #region  TERMINAL UI  (same look as before)
 # ============================================================================
 $UI=@{W=78;Accent='Cyan';Dim='DarkGray';Ok='Green';Warn='Yellow';Crit='Red';Info='Gray';Head='White'}
-$G=@{TL='┌';TR='┐';BL='└';BR='┘';H='─';V='│';LT='├';RT='┤';DTL='╔';DTR='╗';DBL='╚';DBR='╝';DH='═';DV='║';Full='█';Light='░';Ok='✔';Warn='▲';Crit='✖';Info='•';Arrow='→'}
+$G=@{TL='+';TR='+';BL='+';BR='+';H='-';V='|';LT='+';RT='+';DTL='+';DTR='+';DBL='+';DBR='+';DH='=';DV='|';Full='#';Light='.';Ok='[OK]';Warn='[!]';Crit='[X]';Info='-';Arrow='>'}
 function LColor{param($L)switch($L){'Ok'{$UI.Ok}'Warn'{$UI.Warn}'Critical'{$UI.Crit}'Head'{$UI.Head}default{$UI.Info}}}
 function LGlyph{param($L)switch($L){'Ok'{$G.Ok}'Warn'{$G.Warn}'Critical'{$G.Crit}default{$G.Info}}}
 function Clip{param($t,$m)if($null-eq$t){return''}; $t=$t-replace'[\r\n\t]',' '; if($t.Length-le$m){return $t}; if($m-le3){return $t.Substring(0,$m)}; $t.Substring(0,$m-3)+'...'}
