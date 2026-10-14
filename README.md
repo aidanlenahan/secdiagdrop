@@ -8,7 +8,7 @@ computer it runs on. Perfect for any kind of nonprofit needing free, open-source
 
 ---
 
-## The short version of how it works
+## How it works, abbreviated
 
 1. You run one launcher file from a USB stick.
 2. The launcher pulls the current script from your GitHub repo (or whereever you want it stored online) and runs it *in
@@ -18,8 +18,7 @@ computer it runs on. Perfect for any kind of nonprofit needing free, open-source
    security) - all read-only, changing nothing.
 5. It offers to fix/clean/remove things - you confirm each one.
 6. It asks what you fixed, builds one report, and sends it to your endpoint.
-7. Your phone gets an email with the machine's details and an **Approve / Deny**
-   button. Only when you Approve does the report save to your Drive.
+7. If your password you entered before was correct, your phone gets an email with the machine's details and an **Approve / Deny** button. Only when you Approve does the report save to your Drive. If the password was incorrect, it asks if you'd like to save a local report, and never touches your Drive or Gmail account.
 8. On exit, every temporary file is securely wiped. Nothing is left behind.
 
 ---
@@ -33,27 +32,22 @@ computer it runs on. Perfect for any kind of nonprofit needing free, open-source
 | **`DiagnosticDrop.gs`** | Google Apps Script: checks your predefined, script-specific password, emails you the approval, saves the file to Drive | script.google.com |
 | **`RUN-MAINTENANCE.cmd`** | Tiny launcher that starts the whole thing | Your USB stick |
 
-The GitHub repo is **public and contains no secrets**. The only secret is your
-password, which you type at runtime and which is double-checked by the Google side, or an email that you must manually approve for the diagnostic file to be saved to your Drive.
+The GitHub repo is **public and contains no secrets**. The only secret is your password, which you type at runtime and which is double-checked by the Google side, or an email that you must manually approve for the diagnostic file to be saved to your Drive. **The reason that `Invoke-PCMaintenance.ps1` isn't on the thumb drive is because this workflow was designed with swift use in mind. Meaning, a technician could go from computer to computer very quickly by simply plugging in the thumb drive, running the `.cmd` file, which would open the `.ps1` file via the public repo link, and then the technician could unplug the drive safely and move on, with the PowerShell script starting automatically once a password was typed in. Multiple thumb drives are not needed for this workflow, only one thumb drive and one person.
 
 ---
 
 ## Why nothing sensitive is exposed
 
-- **The script and its URLs are not secret.** The endpoint URL is useless
-  without your password.
-- **Your password is never stored.** You type it (hidden) each run. It lives in
-  memory only and is wiped on exit. The Google side stores only a one-way hash
-  of it and rate-limits guesses (5 wrong tries locks it out), so a memorable
-  password is safe.
-- **The diagnostic never touches the machine's disk.** It's built in memory and
-  uploaded. (If upload fails, you're *offered* a local save to the Desktop.)
-- **Saved passwords flagged by the script are never read.** The browser check only sees *which sites*
-  have saved logins, by domain - never the passwords themselves.
+- **The script and its URLs are not secret.** The endpoint URL is useless without your password.
+- **Your password is never stored.** You type it each run, hidden. It is stored in memory only and is wiped on exit. The Google side stores only a one-way hash of it and rate-limits guesses (5 wrong tries locks it out), so a memorable password is safe.
+- **The diagnostic never touches the machine's disk.** It's built in memory and uploaded. (If upload fails, you're *offered* a local save to the Desktop.)
+- **Saved passwords flagged by the script are never read.** The browser check only sees *which sites* have saved logins, by domain - never the passwords themselves.
 
 ---
 
 ## What the scan looks at
+*All of the following is customizable by modifying the PowerShell script. This was the script that worked for me in the environment I used it in, but you may be different with your use case.*
+
 
 - **System summary** - OS, model, CPU, RAM, uptime, memory pressure
 - **Disk usage** - flags any drive over 50% full
@@ -69,7 +63,7 @@ password, which you type at runtime and which is double-checked by the Google si
 - **Temp/cache** - reclaimable space
 - **Windows Update** - pending updates
 
-**These flagged thresholds can be modified in the powershell script.**
+**These flagged thresholds can be modified in the PowerShell script.**
 
 ## What it can fix/remove (only after you confirm each)
 
@@ -104,22 +98,19 @@ These machines may be used by minors, so the tool takes extra care:
 ## One-time setup
 
 ### 1. Google Apps Script (Drive + approval)
-1. Create a Drive folder; copy its ID from the URL.
-2. Pick a password you'll remember. Compute its SHA-256 hash (this can be done on Windows, Linux, or MacOS; just Google it).
-3. Paste `DiagnosticDrop.gs` into script.google.com, fill in `FOLDER_ID`,
-   `PASS_HASH`, `YOUR_EMAIL` with your own, accurate secrets.
+1. Paste `DiagnosticDrop.gs` into script.google.com. You will fill in `FOLDER_ID`, `PASS_HASH`, `YOUR_EMAIL` with your own, accurate secrets.
+2. Create a Drive folder. Copy its ID from the URL. Paste it into the appropriate spot on the `.gs` file.
+3. Pick a password you'll remember. Compute its SHA-256 hash (this can be done on Windows, Linux, or MacOS; just Google it). Put that in the appropriate spot on the `.gs` file. If you forget that password, simply recalculate a hash of a password you know, and update it in the `.gs` file.
 4. Deploy as a **Web app** in Google Apps Script: Execute as **Me**, Access **Anyone**.
 5. Copy the `/exec` URL.
 
-> After **any** edit to the Apps Script, redeploy a **New version** or the old
-> code keeps running.
+
+After **any** edit to the Apps Script, redeploy a **New version** or the old code keeps running.
 
 ### 2. GitHub (host the script + sqlite tool)
 1. Put `Invoke-PCMaintenance.ps1` in a public repo.
-2. Download the official **sqlite-tools** zip (not the DLL one), take
-   `sqlite3.exe`, upload just that.
-3. In the script's `$Config`, set `UploadEndpoint` (your `/exec` URL) and
-   `SqliteToolUrl` (the raw `sqlite3.exe` URL). Leave `Password` empty.
+2. Download the official **sqlite-tools** zip (not the DLL one), take `sqlite3.exe`, upload just that. This functionality is for database control on the script.
+3. In the script's `$Config`, set `UploadEndpoint` (your `/exec` URL) and `SqliteToolUrl` (the raw `sqlite3.exe` URL). Leave `Password` empty.
 
 ### 3. The launcher
 Put `RUN-MAINTENANCE.cmd` on your USB stick and set its `SCRIPTURL` to your raw
@@ -154,22 +145,11 @@ https://YOUR-EXEC-URL/exec?action=ping   ->   {"ok":true,"alive":true}
 ## Good to know / limitations
 
 - **Run as administrator** or update installs, BitLocker changes, SFC, restore
-  points, and some checks won't work.
-- Public IP/geolocation needs the network to allow an outbound lookup; it may be
-  blank on locked-down networks.
-- If a browser is open during the scan, the newest history entries might be
-  missing from the read (harmless). Deletions close the browser first.
-- The tool needs outbound HTTPS to GitHub, your Google endpoint, and (for
-  geo) an IP lookup service. Locked-down networks may need these allowlisted.
+  points, and some checks won't work. To make this easier, you can change the CMD file to always ask for admin access so you don't have to right click on it every time.
+- If a browser is open during the scan, the newest history entries might be missing from the read. Deletions close the browser first.
+- The tool needs outbound HTTPS to GitHub, your Google endpoint, and (for geo) an IP lookup service. Locked-down networks may need these allowlisted.
 
 ---
 
-## Files in this project
-
-| File | Purpose |
-|---|---|
-| `Invoke-PCMaintenance.ps1` | The main script (goes in your GitHub repo) |
-| `DiagnosticDrop.gs` | Google Apps Script backend (goes in script.google.com) |
-| `RUN-MAINTENANCE.cmd` | USB launcher |
-| `sqlite3.exe` | Deletion helper (goes in your GitHub repo) |
-| `README.md` | This file |
+## Inspiration
+I decided to make secdiagdrop after I had been volunteering as an IT technician that would come in periodically for this one nonprofit. Since they have special needs adults consistently interacting with their computers, I would often have to delete malicious files or blocklist websites that they shouldn't be on. This tool made it insanely easier to go from computer to computer, as before I was doing the exact same thing on all of them: file and program deletion, Windows Defender scans, sensitive password scanning, check for updates, etc. secdiagdrop made it really easy, as I could do everything I needed to do in the script, and then that would generate a report file that would automatically go to my Drive, which I could share with the program coordinator. This allowed them to see anything I was doing, and I could also outline anything of concern (i.e. finding someone's banking password).
