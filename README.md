@@ -21,6 +21,10 @@ computer it runs on. Perfect for any kind of nonprofit needing free, open-source
 7. If your password you entered before was correct, your phone gets an email with the machine's details and an **Approve / Deny** button. Only when you Approve does the report save to your Drive. If the password was incorrect, it asks if you'd like to save a local report, and never touches your Drive or Gmail account.
 8. On exit, every temporary file is securely wiped. Nothing is left behind.
 
+<p align="center"><img src="src/emailnotify.png" alt="Email notification asking for approval to upload a diagnostic report" width="400"></p>
+
+[View an example diagnostic report](src/examplediag.md).
+
 ---
 
 ## The three moving parts
