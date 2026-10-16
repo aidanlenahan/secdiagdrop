@@ -157,3 +157,6 @@ https://YOUR-EXEC-URL/exec?action=ping   ->   {"ok":true,"alive":true}
 
 ## Inspiration
 I decided to make secdiagdrop after I had been volunteering as an IT technician that would come in periodically for this one nonprofit. Since they have special needs adults consistently interacting with their computers, I would often have to delete malicious files or blocklist websites that they shouldn't be on. This tool made it insanely easier to go from computer to computer, as before I was doing the exact same thing on all of them: file and program deletion, Windows Defender scans, sensitive password scanning, check for updates, etc. secdiagdrop made it really easy, as I could do everything I needed to do in the script, and then that would generate a report file that would automatically go to my Drive, which I could share with the program coordinator. This allowed them to see anything I was doing, and I could also outline anything of concern (i.e. finding someone's banking password).
+
+
+See the full blog post here: [https://aidanlenahan.com/blog/articles/secdiagdrop](https://aidanlenahan.com/blog/articles/secdiagdrop)
